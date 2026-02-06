@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ask Maira - Asisten Pengetahuan Mu!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="shortcut icon" href="logo-maira.png" type="image/x-icon" />
+    <style>
+      .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid rgba(16, 185, 129, 0.2);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 h-screen flex flex-col">
+    <header class="bg-green-700 text-white p-4 shadow-md flex justify-between items-center">
+      <div>
+        <h1 class="text-xl font-bold">Ask Maira</h1>
+        <p class="text-xs opacity-80">Asisten Pengetahuan PT. Well Maira Food</p>
+      </div>
+      <button onclick="resetMemory()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-xs transition">🗑️ Reset Memori</button>
+    </header>
+
+    <div id="knowledge-bar" class="bg-blue-50 p-2 text-xs text-blue-700 border-b hidden overflow-x-auto whitespace-nowrap">🧠 <b>Memori:</b> <span id="active-files"></span></div>
+
+    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col"></div>
+
+    <div class="p-4 bg-white border-t">
+      <div id="file-info" class="text-xs text-green-600 mb-2 hidden font-medium"></div>
+      <div class="flex gap-2 items-center">
+        <label class="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition relative">
+          <input type="file" id="file-pdf" class="hidden" accept=".pdf" multiple onchange="updateFileInfo()" />
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </label>
+        <input type="text" id="user-input" placeholder="Ketik pertanyaan..." class="flex-1 border rounded-full px-4 py-2 focus:ring-2 focus:ring-green-500 outline-none transition" onkeypress="handleKey(event)" />
+        <button onclick="sendMessage()" id="send-btn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-full transition disabled:bg-gray-400">Kirim</button>
+      </div>
+    </div>
+
+    <script>
+      function updateFileInfo() {
+        const files = document.getElementById("file-pdf").files;
+        const info = document.getElementById("file-info");
+        if (files.length > 0) {
+          info.innerText =
+            `📄 ${files.length} file dipilih: ` +
+            Array.from(files)
+              .map((f) => f.name)
+              .join(", ");
+          info.classList.remove("hidden");
+        }
+      }
+
+      function handleKey(e) {
+        if (e.key === "Enter") sendMessage();
+      }
+
+      async function resetMemory() {
+        if (!confirm("Hapus semua ingatan dokumen Maira?")) return;
+        await fetch("/reset", { method: "POST" });
+        location.reload();
+      }
+
+      async function sendMessage() {
+        const input = document.getElementById("user-input");
+        const fileInput = document.getElementById("file-pdf");
+        const chatBox = document.getElementById("chat-box");
+        const sendBtn = document.getElementById("send-btn");
+
+        if (!input.value && fileInput.files.length === 0) return;
+
+        const userText = input.value;
+
+        // nampilin pesan user
+        chatBox.insertAdjacentHTML(
+          "beforeend",
+          `
+        <div class="self-end bg-green-100 p-3 rounded-lg max-w-[80%] ml-auto text-sm shadow-sm">
+            ${userText || "<i>Mengunggah dokumen...</i>"}
+        </div>
+    `,
+        );
+
+        // nampilin loding lingkaran
+        const loadingId = "loading-" + Date.now();
+        chatBox.insertAdjacentHTML(
+          "beforeend",
+          `
+        <div id="${loadingId}" class="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex justify-center items-center w-12 h-12">
+            <div class="spinner"></div>
+        </div>
+    `,
+        );
+
+        input.value = "";
+        sendBtn.disabled = true;
+        document.getElementById("file-info").classList.add("hidden");
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        const formData = new FormData();
+        formData.append("message", userText);
+        for (let file of fileInput.files) {
+          formData.append("pdf", file);
+        }
+
+        try {
+          const response = await fetch("/chat", { method: "POST", body: formData });
+          const data = await response.json();
+
+          // hapus loding lingkaran
+          const loadingElement = document.getElementById(loadingId);
+          if (loadingElement) loadingElement.remove();
+
+          if (data.currentFiles && data.currentFiles.length > 0) {
+            document.getElementById("knowledge-bar").classList.remove("hidden");
+            document.getElementById("active-files").innerText = data.currentFiles.join(", ");
+          }
+
+          // kasih jawaban dari Maira
+          let formattedReply = data.reply.replace(/\n/g, "<br>");
+          formattedReply = formattedReply.replace(/\[Sumber: (.*?)\]/g, '<small class="text-blue-600 block mt-2 font-medium">📂 Referensi: $1</small>');
+
+          chatBox.insertAdjacentHTML("beforeend", `<div class="bg-white p-3 rounded-lg shadow-sm border-l-4 border-green-500 text-sm"><b>Maira:</b><br>${formattedReply}</div>`);
+        } catch (err) {
+          const loadingElement = document.getElementById(loadingId);
+          if (loadingElement) loadingElement.remove();
+          chatBox.insertAdjacentHTML("beforeend", `<div class="bg-red-100 text-red-700 p-3 rounded-lg text-sm">Gagal: ${err.message}</div>`);
+        } finally {
+          sendBtn.disabled = false;
+          fileInput.value = "";
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+      }
+    </script>
+  </body>
+</html>
