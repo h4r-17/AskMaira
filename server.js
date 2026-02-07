@@ -3,19 +3,30 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager } from "@google/generative-ai/server";
 import multer from "multer";
 import "dotenv/config";
+import path from "path";
 import fs from "fs";
 
 const app = express();
-const upload = multer({ dest: "uploads/" });
+
+// Penyimpanan presisten data
+const dataDir = path.join(process.cwd(), "data");
+const UPLOAD_DIR = path.join(dataDir, "uploads");
+const DATABASE_FILE = path.join(dataDir, "maira_memory.json");
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// Atur multer buat nyimpen sementara di folder data/uploads
+const upload = multer({ dest: UPLOAD_DIR });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 
-// db dalam bentuk json
-const DATABASE_FILE = "maira_memory.json";
+// DB memori Maira
 let mairaMemory = [];
 
-// kumpulin data yang ada saat server pertama kali nyala
+// Ambil data saat server pertama kali nyala
 if (fs.existsSync(DATABASE_FILE)) {
   try {
     const rawData = fs.readFileSync(DATABASE_FILE);
@@ -27,7 +38,7 @@ if (fs.existsSync(DATABASE_FILE)) {
   }
 }
 
-// buat nyimpen ke localdisk (nyimpen memori pengetahuan)
+// Fungsi simpan memori ke disk
 const saveMemoryToDisk = () => {
   fs.writeFileSync(DATABASE_FILE, JSON.stringify(mairaMemory, null, 2));
 };
@@ -35,7 +46,7 @@ const saveMemoryToDisk = () => {
 app.use(express.json());
 app.use(express.static("public"));
 
-// endpoint deteksi model AI
+// Endpoint deteksi model AI
 let cachedModelName = null;
 async function getValidModel() {
   if (cachedModelName) return cachedModelName;
@@ -52,7 +63,7 @@ async function getValidModel() {
   }
 }
 
-// endpoint chat dan upload
+// Endpoint chat dan upload
 app.post("/chat", upload.array("pdf", 10), async (req, res) => {
   try {
     const { message } = req.body;
@@ -71,9 +82,10 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
           fileName: file.originalname,
         });
 
+        // Hapus file fisik setelah diupload ke Google AI
         if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       }
-      saveMemoryToDisk(); // nyimpen ke json
+      saveMemoryToDisk();
     }
 
     const targetModel = await getValidModel();
@@ -81,21 +93,21 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
       model: targetModel,
       systemInstruction: `NAMA & PERAN: Maira, asisten di bidang produksi PT. Well Maira Food.
 
-    ATURAN MERESPON (SANGAT PENTING):
-    1. JANGAN memberikan salam (seperti Halo, Hai, Selamat pagi, dll) jika kamu sedang menjawab pertanyaan teknis atau pertanyaan lanjutan. 
-    2. HANYA berikan salam JIKA pesan user adalah sapaan pertama kali (seperti "Halo", "Maira").
-    3. Jika user bertanya tentang SOP/isi dokumen, LANGSUNG jawab ke intinya tanpa basa-basi pembuka.
-    4. Jawab HANYA berdasarkan dokumen yang ada. Jika tidak ada, bilang jujur.
-    5. Gunakan bahasa santai aku/saya namun tetap informatif.
-    6. Selalu ingat aspek K3 di akhir jawaban jika relevan dengan instruksi kerja.
-    
-    ATURAN SUMBER:
-    1. Di akhir setiap jawaban, kamu WAJIB menuliskan sumber dokumen yang kamu pakai dengan format: [Sumber: NamaFile1.pdf, NamaFile2.pdf]
-    2. Jika jawaban diambil dari lebih dari satu dokumen, sebutkan semuanya.
-    3. Jika kamu menjawab berdasarkan ingatan umum karena tidak ada di dokumen (setelah memberi disclaimer), jangan tuliskan sumber ini.`,
+      ATURAN MERESPON (SANGAT PENTING):
+      1. JANGAN memberikan salam (seperti Halo, Hai, Selamat pagi, dll) jika kamu sedang menjawab pertanyaan teknis atau pertanyaan lanjutan. 
+      2. HANYA berikan salam JIKA pesan user adalah sapaan pertama kali (seperti "Halo", "Maira").
+      3. Jika user bertanya tentang SOP/isi dokumen, LANGSUNG jawab ke intinya tanpa basa-basi pembuka.
+      4. Jawab HANYA berdasarkan dokumen yang ada. Jika tidak ada, bilang jujur.
+      5. Gunakan bahasa santai Saya namun tetap informatif.
+      6. Selalu ingat aspek K3 di akhir jawaban jika relevan dengan instruksi kerja.
+      
+      ATURAN SUMBER:
+      1. Di akhir setiap jawaban, kamu WAJIB menuliskan sumber dokumen yang kamu pakai dengan format: [Sumber: NamaFile1.pdf, NamaFile2.pdf]
+      2. Jika jawaban diambil dari lebih dari satu dokumen, sebutkan semuanya.
+      3. Jika kamu menjawab berdasarkan ingatan umum karena tidak ada di dokumen (setelah memberi disclaimer), jangan tuliskan sumber ini.`,
     });
 
-    // gabungin file upload dan teks
+    // Menggabung file upload dan teks
     let parts = mairaMemory.map((item) => ({
       fileData: { mimeType: item.fileData.mimeType, fileUri: item.fileData.fileUri },
     }));
@@ -103,7 +115,7 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: parts }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
     });
 
     res.json({
@@ -116,7 +128,7 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
   }
 });
 
-// reset endpoint (hapus memori/pengetahuan)
+// Reset endpoint (hapus memori/pengetahuan)
 app.post("/reset", (req, res) => {
   mairaMemory = [];
   if (fs.existsSync(DATABASE_FILE)) fs.unlinkSync(DATABASE_FILE);
@@ -124,7 +136,7 @@ app.post("/reset", (req, res) => {
   res.json({ message: "Ingatan permanen telah dibersihkan!" });
 });
 
-app.listen(3000, () => {
-  console.log("🚀 Maira siap bertugas di http://localhost:3000");
-  if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Maira siap bertugas di port ${PORT}`);
 });
