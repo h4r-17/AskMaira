@@ -40,7 +40,11 @@
     </div>
 
     <div class="p-4 bg-white border-t">
-      <div id="file-info" class="text-xs text-green-600 mb-2 hidden font-medium"></div>
+      <div id="file-container" class="hidden flex items-center gap-2 mb-2 bg-green-50 w-fit px-3 py-1 rounded-full border border-green-200">
+        <div id="file-info" class="text-xs text-green-600 font-medium"></div>
+        <button onclick="clearFiles()" class="text-red-500 hover:text-red-700 font-bold text-sm ml-1" title="Batalkan upload">✕</button>
+      </div>
+
       <div class="flex gap-2 items-center">
         <label class="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition relative">
           <input type="file" id="file-pdf" class="hidden" accept=".pdf" multiple onchange="updateFileInfo()" />
@@ -57,14 +61,25 @@
       function updateFileInfo() {
         const files = document.getElementById("file-pdf").files;
         const info = document.getElementById("file-info");
+        const container = document.getElementById("file-container");
+
         if (files.length > 0) {
           info.innerText =
             `📄 ${files.length} file dipilih: ` +
             Array.from(files)
               .map((f) => f.name)
               .join(", ");
-          info.classList.remove("hidden");
+          container.classList.remove("hidden");
+        } else {
+          container.classList.add("hidden");
         }
+      }
+
+      // FUNGSI BARU UNTUK BATALKAN UPLOAD
+      function clearFiles() {
+        const fileInput = document.getElementById("file-pdf");
+        fileInput.value = ""; // hapus isi input file
+        document.getElementById("file-container").classList.add("hidden");
       }
 
       function handleKey(e) {
@@ -87,7 +102,6 @@
 
         const userText = input.value;
 
-        // nampilin pesan user
         chatBox.insertAdjacentHTML(
           "beforeend",
           `
@@ -97,7 +111,6 @@
     `,
         );
 
-        // nampilin loding lingkaran
         const loadingId = "loading-" + Date.now();
         chatBox.insertAdjacentHTML(
           "beforeend",
@@ -110,7 +123,7 @@
 
         input.value = "";
         sendBtn.disabled = true;
-        document.getElementById("file-info").classList.add("hidden");
+        document.getElementById("file-container").classList.add("hidden"); // sembunyikan preview saat kirim
         chatBox.scrollTop = chatBox.scrollHeight;
 
         const formData = new FormData();
@@ -123,7 +136,6 @@
           const response = await fetch("/chat", { method: "POST", body: formData });
           const data = await response.json();
 
-          // hapus loding lingkaran
           const loadingElement = document.getElementById(loadingId);
           if (loadingElement) loadingElement.remove();
 
@@ -132,7 +144,6 @@
             document.getElementById("active-files").innerText = data.currentFiles.join(", ");
           }
 
-          // kasih jawaban dari Maira
           let formattedReply = data.reply.replace(/\n/g, "<br>");
           formattedReply = formattedReply.replace(/\[Sumber: (.*?)\]/g, '<small class="text-blue-600 block mt-2 font-medium">📂 Referensi: $1</small>');
 

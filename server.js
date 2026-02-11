@@ -67,6 +67,7 @@ async function getValidModel() {
 app.post("/chat", upload.array("pdf", 10), async (req, res) => {
   try {
     const { message } = req.body;
+    let fileUploadedThisSession = false;
 
     // Proses File Baru jika ada
     if (req.files && req.files.length > 0) {
@@ -82,10 +83,18 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
           fileName: file.originalname,
         });
 
-        // Hapus file fisik setelah diupload ke Google AI
         if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       }
       saveMemoryToDisk();
+      fileUploadedThisSession = true;
+    }
+
+    // JIKA hanya upload file TANPA pesan teks, langsung kirim respon sukses
+    if (fileUploadedThisSession && (!message || message.trim() === "")) {
+      return res.json({
+        reply: "File telah di unggah, silakan ajukan pertanyaan.",
+        currentFiles: mairaMemory.map((f) => f.fileName),
+      });
     }
 
     const targetModel = await getValidModel();
@@ -100,6 +109,8 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
       4. Jawab HANYA berdasarkan dokumen yang ada. Jika tidak ada, bilang jujur.
       5. Gunakan bahasa santai Saya namun tetap informatif.
       6. Selalu ingat aspek K3 di akhir jawaban jika relevan dengan instruksi kerja.
+      7. Jika file SOP telah diupload, WAJIB memberikan respon "File SOP telah diterima dan disimpan." sebelum menjawab pertanyaan apapun.
+      8. Jika ada beberapa dokumen yang relevan, gabungkan informasi dari semua dokumen tersebut untuk memberikan jawaban yang komprehensif.
       
       ATURAN SUMBER:
       1. Di akhir setiap jawaban, kamu WAJIB menuliskan sumber dokumen yang kamu pakai dengan format: [Sumber: NamaFile1.pdf, NamaFile2.pdf]
@@ -107,7 +118,6 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
       3. Jika kamu menjawab berdasarkan ingatan umum karena tidak ada di dokumen (setelah memberi disclaimer), jangan tuliskan sumber ini.`,
     });
 
-    // Menggabung file upload dan teks
     let parts = mairaMemory.map((item) => ({
       fileData: { mimeType: item.fileData.mimeType, fileUri: item.fileData.fileUri },
     }));
