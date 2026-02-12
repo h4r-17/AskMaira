@@ -109,8 +109,7 @@ app.post("/chat", upload.array("pdf", 10), async (req, res) => {
       4. Jawab HANYA berdasarkan dokumen yang ada. Jika tidak ada, bilang jujur.
       5. Gunakan bahasa santai Saya namun tetap informatif.
       6. Selalu ingat aspek K3 di akhir jawaban jika relevan dengan instruksi kerja.
-      7. Jika file SOP telah diupload, WAJIB memberikan respon "File SOP telah diterima dan disimpan." sebelum menjawab pertanyaan apapun.
-      8. Jika ada beberapa dokumen yang relevan, gabungkan informasi dari semua dokumen tersebut untuk memberikan jawaban yang komprehensif.
+      7. Jika ada beberapa dokumen yang relevan, gabungkan informasi dari semua dokumen tersebut untuk memberikan jawaban yang komprehensif.
       
       ATURAN SUMBER:
       1. Di akhir setiap jawaban, kamu WAJIB menuliskan sumber dokumen yang kamu pakai dengan format: [Sumber: NamaFile1.pdf, NamaFile2.pdf]
